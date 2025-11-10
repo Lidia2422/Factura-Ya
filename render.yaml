@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: factura-ya-api
+    env: docker
+    repo: https://github.com/Lidia2422/Factura-Ya
+    region: ohio # Cambia a la región más cercana (ej. "oregon" o "ohio")
+    plan: free
+    port: 8080
+    buildCommand: docker build -t factura-api .
+    startCommand: dotnet FacturadorAPI.dll
+    autoDeploy: true
