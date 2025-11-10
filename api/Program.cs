@@ -1,11 +1,12 @@
 // --- PASO 1: USING STATEMENTS (SIEMPRE PRIMERO) ---
 using System;
-using System.Text.Json; // Importante para serializar
+using System.Text.Json;
 using System.Threading.Tasks;
+using System.Collections.Generic; // Asegura que List<T> funcione
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using StackExchange.Redis; // El paquete que instalamos
+using StackExchange.Redis;
 using MercadoPago.Config;
 using MercadoPago.Client.Payment;
 using MercadoPago.Client.Preference;
@@ -13,16 +14,16 @@ using MercadoPago.Resource.Payment;
 using MercadoPago.Resource.Preference;
 // Agrega aquí los "using" de QuestPDF y tu PAC
 // using QuestPDF.Fluent;
-// using FiscalAPI.SDK;
+// using FiscalAPI.SDK; 
 
+
+// --- PASO 2: CÓDIGO EJECUTABLE (INSTRUCCIONES DE NIVEL SUPERIOR) ---
 
 // --- LEER VARIABLES DE ENTORNO ---
 var mercadopagoAccessToken = Environment.GetEnvironmentVariable("MERCADOPAGO_ACCESS_TOKEN");
 var pacApiKey = Environment.GetEnvironmentVariable("PAC_API_KEY");
-// --- --- --- ¡AQUÍ ESTÁ LA CORRECCIÓN! --- --- ---
-var kvUrl = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_URL"); // ¡CORREGIDO!
-var kvToken = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_TOKEN"); // ¡CORREGIDO!
-// --- --- --- --- --- --- --- --- --- --- --- ---
+var kvUrl = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_URL");
+var kvToken = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_TOKEN");
 
 MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 
@@ -32,9 +33,7 @@ var redis = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
 IDatabase kvDb = redis.GetDatabase();
 
 
-// --- PASO 2: CÓDIGO EJECUTABLE (INSTRUCCIONES DE NIVEL SUPERIOR) ---
-
-// --- CONFIGURACIÓN ---
+// --- CONFIGURACIÓN DE LA APLICACIÓN ---
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -49,12 +48,12 @@ if (app.Environment.IsDevelopment())
 app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 app.UseHttpsRedirection();
 
-// --- ENDPOINTS DE NUESTRA API ---
-// (El resto del código de los endpoints sigue exactamente igual)
 
-// 1. El Frontend llama a este para iniciar el pago
+// --- ENDPOINTS DE NUESTRA API ---
+
+// 1. /api/crear-preferencia-pago
 app.MapPost("/api/crear-preferencia-pago", async (PagoRequest request) => {
-    var paymentId = Guid.NewGuid().ToString(); // Nuestro ID interno
+    var paymentId = Guid.NewGuid().ToString();
     try
     {
         var preferenceRequest = new PreferenceRequest
@@ -69,8 +68,8 @@ app.MapPost("/api/crear-preferencia-pago", async (PagoRequest request) => {
                     CurrencyId = "MXN",
                 }
             },
-            ExternalReference = paymentId, // ¡Importante! Es nuestro ID
-            NotificationUrl = "https://factura-ya.vercel.app/api/webhook-mercadopago" // ¡Revisa que sea tu URL!
+            ExternalReference = paymentId,
+            NotificationUrl = "https://factura-ya.vercel.app/api/webhook-mercadopago"
         };
         var client = new PreferenceClient();
         Preference preference = await client.CreateAsync(preferenceRequest);
@@ -83,7 +82,7 @@ app.MapPost("/api/crear-preferencia-pago", async (PagoRequest request) => {
     }
 });
 
-// 2. El Frontend llama a este DESPUÉS de crear la preferencia
+// 2. /api/guardar-datos-temporales
 app.MapPost("/api/guardar-datos-temporales", async (FacturaRequest request) => {
 
     var facturaJson = JsonSerializer.Serialize(request);
@@ -94,7 +93,7 @@ app.MapPost("/api/guardar-datos-temporales", async (FacturaRequest request) => {
     return Results.Ok(new { status = "datos_recibidos" });
 });
 
-// 3. MercadoPago llama a este CUANDO el pago se aprueba
+// 3. /api/webhook-mercadopago
 app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificacion) => {
 
     if (notificacion.action == "payment.updated")
@@ -104,17 +103,19 @@ app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificac
         Payment payment = await paymentClient.GetAsync(paymentIdFromNotification);
 
         var paymentStatus = payment.Status;
-        var paymentId = payment.ExternalReference; // Nuestro ID interno
+        var paymentId = payment.ExternalReference;
 
         if (paymentStatus == "approved")
         {
             try
             {
                 string? facturaJson = await kvDb.StringGetAsync(paymentId);
+
                 if (string.IsNullOrEmpty(facturaJson))
                 {
                     throw new Exception($"No se encontraron datos para PaymentId {paymentId}");
                 }
+
                 var datosFactura = JsonSerializer.Deserialize<FacturaRequest>(facturaJson);
 
                 var cerBytes = Convert.FromBase64String(datosFactura.CsdCerBase64);
@@ -145,7 +146,7 @@ app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificac
     return Results.Ok();
 });
 
-// 4. El Frontend llama a este cada 3 segundos
+// 4. /api/status-factura/{paymentId}
 app.MapGet("/api/status-factura/{paymentId}", async (string paymentId) => {
 
     string? estadoJson = await kvDb.StringGetAsync($"status_{paymentId}");
@@ -159,11 +160,15 @@ app.MapGet("/api/status-factura/{paymentId}", async (string paymentId) => {
     return Results.Ok(estado);
 });
 
+
 // --- EJECUTAR LA API ---
 app.Run();
 
+
 // --- PASO 3: DECLARACIONES DE TIPOS (RECORDS) ---
+// ¡ESTE BLOQUE DEBE IR AQUÍ AL FINAL, DESPUÉS DE app.Run()!
 public record PagoRequest(decimal Importe);
+
 public record FacturaRequest(
     string PaymentId,
     string CsdCerBase64,
