@@ -5,95 +5,106 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-// Agrega aquí los "using" de MercadoPago, QuestPDF y tu PAC
-// using MercadoPago.SDK.Client;
-// using MercadoPago.SDK.Config;
-// using QuestPDF.Fluent;
-// using FiscalAPI.SDK;
+// Agrega los "using" de MercadoPago, QuestPDF y tu PAC
+using MercadoPago.Config;
+using MercadoPago.Client.Payment;
+using MercadoPago.Client.Preference;
+using MercadoPago.Resource.Payment;
+using MercadoPago.Resource.Preference;
+// using FiscalAPI.SDK; // Asegúrate de agregar el using de tu PAC
+// using QuestPDF.Fluent; // Asegúrate de agregar el using de QuestPDF
+
+// --- LEER VARIABLES DE ENTORNO (¡NUEVO!) ---
+var mercadopagoAccessToken = Environment.GetEnvironmentVariable("MERCADOPAGO_ACCESS_TOKEN");
+var pacApiKey = Environment.GetEnvironmentVariable("PAC_API_KEY");
+MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 
 
 // --- PASO 2: CÓDIGO EJECUTABLE (INSTRUCCIONES DE NIVEL SUPERIOR) ---
 
 // --- CONFIGURACIÓN ---
 var builder = WebApplication.CreateBuilder(args);
-
-// Habilitar Swagger (para pruebas locales en VS2022)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCors();
 var app = builder.Build();
 
-// Configuración de Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
-// Configuración de CORS (¡MUY IMPORTANTE!)
-app.UseCors(policy =>
-    policy.AllowAnyOrigin()
-          .AllowAnyMethod()
-          .AllowAnyHeader());
-
-app.UseHttpsRedirection(); // Importante para producción
-
+app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+app.UseHttpsRedirection();
 
 // --- ENDPOINTS DE NUESTRA API ---
 
-// 1. El Frontend llama a este para iniciar el pago
+// 1. El Frontend llama a este para iniciar el pago (¡YA NO ES SIMULACIÓN!)
 app.MapPost("/api/crear-preferencia-pago", async (PagoRequest request) => {
-
-    // TODO: Configurar tu SDK de MercadoPago
-    // MercadoPagoConfig.AccessToken = "TU_ACCESS_TOKEN_PRIVADO";
 
     var paymentId = Guid.NewGuid().ToString(); // Nuestro ID interno
 
-    // var preferenceRequest = new PreferenceRequest
-    // {
-    //     Items = new List<PreferenceItemRequest> { ... item de $29 MXN ... },
-    //     ExternalReference = paymentId,
-    //     NotificationUrl = "https://factura-ahora.com.mx/api/webhook-mercadopago"
-    // };
-    // var client = new PreferenceClient();
-    // var preference = await client.CreateAsync(preferenceRequest);
+    try
+    {
+        var preferenceRequest = new PreferenceRequest
+        {
+            Items = new List<PreferenceItemRequest>
+            {
+                new PreferenceItemRequest
+                {
+                    Title = "Pago de Timbrado de Factura",
+                    Quantity = 1,
+                    UnitPrice = 29.00m, // Asegúrate de que sea decimal
+                    CurrencyId = "MXN",
+                }
+            },
+            ExternalReference = paymentId, // ¡Importante! Es nuestro ID
+            NotificationUrl = "https://factura-ya.vercel.app/api/webhook-mercadopago" // ¡Usa tu URL real!
+        };
 
-    // --- Simulación (mientras no tienes el SDK) ---
-    var preferenceId = "ID_DE_PREFERENCIA_SIMULADO";
-    // --- Fin Simulación ---
+        var client = new PreferenceClient();
+        Preference preference = await client.CreateAsync(preferenceRequest);
 
-    return Results.Ok(new { preferenceId = preferenceId, paymentId = paymentId });
+        return Results.Ok(new { preferenceId = preference.Id, paymentId = paymentId });
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error creando preferencia: {ex.Message}");
+        return Results.Problem("Error al conectar con MercadoPago");
+    }
 });
 
 
-// 2. El Frontend llama a este DESPUÉS de crear la preferencia
+// 2. El Frontend llama a este DESPUÉS de crear la preferencia (Sigue igual)
 app.MapPost("/api/guardar-datos-temporales", async (FacturaRequest request) => {
 
-    // TODO: Guardar 'request' (que tiene los CSD en Base64 y los datos)
-    // en una base de datos temporal o caché (Azure Table Storage, etc.)
+    // TODO: Guardar 'request' en una base de datos temporal (Azure Table, etc.)
     // usando request.PaymentId como la llave.
-
     Console.WriteLine($"Datos guardados para PaymentId: {request.PaymentId}");
 
     return Results.Ok(new { status = "datos_recibidos" });
 });
 
 
-// 3. MercadoPago llama a este CUANDO el pago se aprueba
+// 3. MercadoPago llama a este CUANDO el pago se aprueba (¡YA NO ES SIMULACIÓN!)
 app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificacion) => {
 
     if (notificacion.action == "payment.updated")
     {
         // TODO: Validar que la notificación sea legítima de MercadoPago
 
-        // TODO: Consultar el estado del pago con el notificacion.data.id
-        // var paymentClient = new PaymentClient();
-        // var payment = await paymentClient.GetAsync(notificacion.data.id);
+        // --- --- --- INICIA CORRECCIÓN --- --- ---
+        // El ID de la notificación viene como string, pero GetAsync espera un 'long'.
+        // Lo convertimos:
+        long paymentIdFromNotification = long.Parse(notificacion.data.id);
 
-        // --- Simulación ---
-        var paymentStatus = "approved";
-        var paymentId = "ID_DE_PAGO_QUE_PUSIMOS_EN_EXTERNAL_REFERENCE";
-        // --- Fin Simulación ---
+        var paymentClient = new PaymentClient();
+        // Usamos la nueva variable 'long' aquí:
+        Payment payment = await paymentClient.GetAsync(paymentIdFromNotification);
+        // --- --- --- TERMINA CORRECCIÓN --- --- ---
+
+        var paymentStatus = payment.Status;
+        var paymentId = payment.ExternalReference; // Nuestro ID interno
 
         if (paymentStatus == "approved")
         {
@@ -107,7 +118,7 @@ app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificac
                 // var keyBytes = Convert.FromBase64String(datosFactura.CsdKeyBase64);
 
                 // 3. ¡Llamar al PAC (FiscalAPI)!
-                // var pac = new ServicioPAC("TU_API_KEY_PAC");
+                // var pac = new ServicioPAC(pacApiKey); // ¡Usa la variable de entorno!
                 // var cfdi = await pac.Timbrar(cerBytes, keyBytes, datosFactura.CsdPassword, ...);
                 Console.WriteLine($"Timbrando factura para {paymentId}");
 
@@ -121,7 +132,7 @@ app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificac
                 // var urlXml = await GuardarEnBlob(cfdi.Uuid + ".xml", cfdi.Xml);
                 // var urlPdf = await GuardarEnBlob(cfdi.Uuid + ".pdf", pdfBytes);
 
-                // --- Simulación ---
+                // --- Simulación (SOLO DE GUARDADO, EL PAGO ES REAL) ---
                 var urlXml = "https://simulado.com/factura.xml";
                 var urlPdf = "https://simulado.com/factura.pdf";
                 // --- Fin Simulación ---
@@ -142,7 +153,7 @@ app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificac
 });
 
 
-// 4. El Frontend llama a este cada 3 segundos para ver si ya está la factura
+// 4. El Frontend llama a este cada 3 segundos (Sigue igual)
 app.MapGet("/api/status-factura/{paymentId}", async (string paymentId) => {
 
     // TODO: Consultar estado en la Cache/DB
@@ -151,13 +162,14 @@ app.MapGet("/api/status-factura/{paymentId}", async (string paymentId) => {
     // --- Simulación ---
     var estado = new
     {
-        Status = "lista", // "procesando", "error"
+        Status = "lista",
         UrlXml = "https://simulado.com/factura.xml",
         UrlPdf = "https://simulado.com/factura.pdf",
         Mensaje = ""
     };
     // --- Fin Simulación ---
 
+    // ... (resto del código igual)
     if (estado.Status == "lista")
     {
         return Results.Ok(new { status = "lista", urlXml = estado.UrlXml, urlPdf = estado.UrlPdf });
@@ -166,19 +178,14 @@ app.MapGet("/api/status-factura/{paymentId}", async (string paymentId) => {
     {
         return Results.Ok(new { status = "error", mensaje = estado.Mensaje });
     }
-
     return Results.Ok(new { status = "procesando" });
 });
 
-
-// --- EJECUTAR LA API ---
 app.Run();
 
-
 // --- PASO 3: DECLARACIONES DE TIPOS (RECORDS) ---
-// (AHORA VAN AL FINAL DEL ARCHIVO)
+// ... (resto del código igual)
 public record PagoRequest(decimal Importe);
-
 public record FacturaRequest(
     string PaymentId,
     string CsdCerBase64,
@@ -192,10 +199,5 @@ public record FacturaRequest(
     string ConceptoDesc,
     decimal ConceptoImporte
 );
-
-public record MercadoPagoNotificacion(
-    string action,
-    MercadoPagoPaymentData data
-);
-
+public record MercadoPagoNotificacion(string action, MercadoPagoPaymentData data);
 public record MercadoPagoPaymentData(string id);

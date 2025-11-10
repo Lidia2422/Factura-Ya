@@ -6,7 +6,7 @@ const TU_API_URL = "https://factura-ya.vercel.app"; // ¡USA TU URL REAL DE VERC
 // --- --- --- --- --- --- --- --- --- --- ---
 
 // Reemplaza esto con tu Public Key de MercadoPago (la que es "TEST-...")
-const mp = new MercadoPago('TU_PUBLIC_KEY_DE_MERCADOPAGO');
+const mp = new MercadoPago('TEST-da4036ed-7e39-46b0-b254-6005d0b696de');
 
 // --- Selección de Elementos ---
 const botonPagar = document.getElementById('boton-pagar');
