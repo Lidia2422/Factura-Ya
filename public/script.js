@@ -2,12 +2,11 @@
 // ¡¡¡ ATENCIÓN AQUÍ !!!
 // --- --- --- --- --- --- --- --- --- --- ---
 // 1. Esta es tu URL de Vercel. Asegúrate de que sea la correcta.
-const TU_API_URL = "https://factura-ya.vercel.app"; // ¡USA TU URL REAL DE VERCEL!
+const TU_API_URL = "https://factura-b9nijoxhn-olga-lidia-felix-medinas-projects.vercel.app/"; // ¡USA TU URL REAL DE VERCEL!
 // --- --- --- --- --- --- --- --- --- --- ---
 
 // Reemplaza esto con tu Public Key de MercadoPago (la que es "TEST-...")
 const mp = new MercadoPago('TEST-da4036ed-7e39-46b0-b254-6005d0b696de');
-
 // --- Selección de Elementos ---
 const botonPagar = document.getElementById('boton-pagar');
 const seccionFormulario = document.getElementById('seccion-formulario');
@@ -51,16 +50,29 @@ async function iniciarPago() {
         paymentIdGlobal = preferencia.paymentId; // Nuestro ID interno
 
         // 2. Recolectar TODOS los datos (incluyendo archivos en Base64)
-        const [cerBase64, keyBase64] = await Promise.all([
-            fileToBase64(document.getElementById('archivoCer').files[0]),
-            fileToBase64(document.getElementById('archivoKey').files[0])
-        ]);
+
+        // --- --- --- ¡INICIA HACK DE PRUEBA! --- --- ---
+        // Como no podemos descargar los CSD, vamos a saltarnos la lectura
+        // de archivos y a "hardcodear" texto falso.
+        
+        // const [cerBase64, keyBase64] = await Promise.all([
+        //     fileToBase64(document.getElementById('archivoCer').files[0]),
+        //     fileToBase64(document.getElementById('archivoKey').files[0])
+        // ]);
+
+        // Texto "fakecertfile" en Base64
+        const cerBase64 = "ZmFrZWNlcnRmaWxl"; 
+        // Texto "fakekeyfile" en Base64
+        const keyBase64 = "ZmFrZWtleWZpbGU="; 
+        
+        // --- --- --- ¡TERMINA HACK DE PRUEBA! --- --- ---
+
 
         const datosFactura = {
             paymentId: paymentIdGlobal,
-            csdCerBase64: cerBase64,
-            csdKeyBase64: keyBase64,
-            csdPassword: document.getElementById('csdPassword').value,
+            csdCerBase64: cerBase64, // Usa el texto "fake"
+            csdKeyBase64: keyBase64, // Usa el texto "fake"
+            csdPassword: "12345678a", // Usa una contraseña "fake"
             clienteRfc: document.getElementById('clienteRfc').value,
             clienteNombre: document.getElementById('clienteNombre').value,
             clienteCp: document.getElementById('clienteCp').value,
@@ -86,7 +98,6 @@ async function iniciarPago() {
             },
             callbacks: {
                 onReady: () => {
-                    // Se disparó el modal de pago, empezamos a preguntar
                     seccionFormulario.style.display = 'none';
                     seccionProcesando.style.display = 'block';
                     iniciarVerificacionDeFactura(paymentIdGlobal);
@@ -96,7 +107,7 @@ async function iniciarPago() {
 
     } catch (error) {
         console.error(error);
-        alert('Error al iniciar el pago. Revisa que los CSD estén cargados. ' + error.message);
+        alert('Error al iniciar el pago. ' + error.message);
         botonPagar.disabled = false;
         botonPagar.innerText = "Pagar y Generar Factura";
     }
@@ -117,7 +128,6 @@ function iniciarVerificacionDeFactura(paymentId) {
                 seccionProcesando.style.display = 'none';
                 seccionFormulario.style.display = 'block'; // Mostrar formulario de nuevo
             }
-            // Si es "procesando", sigue esperando
         } catch (error) {
             console.error('Error verificando status', error);
         }
