@@ -1,16 +1,5 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "builds": [
-    {
-      "src": "api/FacturadorAPI.csproj",
-      "use": "@vercel/dotnet"
-    }
-  ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "api/FacturadorAPI.csproj"
-    },
     {
       "src": "/(.*)",
       "dest": "/public/$1"
