@@ -1,5 +1,6 @@
 # PASO 1: Usamos la imagen oficial de .NET para construir la aplicación
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+- FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
++ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["api/FacturadorAPI.csproj", "api/"]
 
@@ -14,7 +15,8 @@ WORKDIR "/src/api"
 RUN dotnet publish "FacturadorAPI.csproj" -c Release -o /app/publish --no-restore
 
 # PASO 2: Usamos la imagen de ejecución (más pequeña)
-FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS final
+- FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS final
++ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
