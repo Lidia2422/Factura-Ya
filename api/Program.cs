@@ -19,13 +19,14 @@ using MercadoPago.Resource.Preference;
 // --- LEER VARIABLES DE ENTORNO ---
 var mercadopagoAccessToken = Environment.GetEnvironmentVariable("MERCADOPAGO_ACCESS_TOKEN");
 var pacApiKey = Environment.GetEnvironmentVariable("PAC_API_KEY");
-var kvUrl = Environment.GetEnvironmentVariable("KV_REST_API_URL");
-var kvToken = Environment.GetEnvironmentVariable("KV_REST_API_TOKEN");
+// --- --- --- ¡AQUÍ ESTÁ LA CORRECCIÓN! --- --- ---
+var kvUrl = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_URL"); // ¡CORREGIDO!
+var kvToken = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_TOKEN"); // ¡CORREGIDO!
+// --- --- --- --- --- --- --- --- --- --- --- ---
 
 MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 
 // --- CONFIGURAR CONEXIÓN A BASE DE DATOS KV (REDIS) ---
-// ¡AQUÍ ESTÁ LA CORRECCIÓN! ( ? por , )
 var redisConnectionString = $"{kvUrl},ssl=true,password={kvToken}";
 var redis = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
 IDatabase kvDb = redis.GetDatabase();
@@ -49,6 +50,7 @@ app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader())
 app.UseHttpsRedirection();
 
 // --- ENDPOINTS DE NUESTRA API ---
+// (El resto del código de los endpoints sigue exactamente igual)
 
 // 1. El Frontend llama a este para iniciar el pago
 app.MapPost("/api/crear-preferencia-pago", async (PagoRequest request) => {
