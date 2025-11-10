@@ -1,0 +1,3 @@
+# Exclusiones de .NET Core
+**/bin/
+**/obj/
