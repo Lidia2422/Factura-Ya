@@ -2,7 +2,7 @@
 // ¡¡¡ ATENCIÓN AQUÍ !!!
 // --- --- --- --- --- --- --- --- --- --- ---
 // 1. Esta es tu URL de Vercel. Asegúrate de que sea la correcta.
-const TU_API_URL = "https://factura-b9nijoxhn-olga-lidia-felix-medinas-projects.vercel.app/"; // ¡USA TU URL REAL DE VERCEL!
+const TU_API_URL = ""; // ¡USA TU URL REAL DE VERCEL!
 // --- --- --- --- --- --- --- --- --- --- ---
 
 // Reemplaza esto con tu Public Key de MercadoPago (la que es "TEST-...")
