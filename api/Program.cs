@@ -22,13 +22,21 @@ using MercadoPago.Resource.Preference;
 // --- LEER VARIABLES DE ENTORNO ---
 var mercadopagoAccessToken = Environment.GetEnvironmentVariable("MERCADOPAGO_ACCESS_TOKEN");
 var pacApiKey = Environment.GetEnvironmentVariable("PAC_API_KEY");
-var kvUrl = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_URL");
-var kvToken = Environment.GetEnvironmentVariable("UPSTASH_REDIS_REST_TOKEN");
+
+// Leemos la URL completa que Upstash nos da
+var redisUrlCompleta = Environment.GetEnvironmentVariable("REDIS_URL");
 
 MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 
-// --- CONFIGURAR CONEXIÓN A BASE DE DATOS KV (REDIS) ---
-var redisConnectionString = $"{kvUrl},ssl=true,password={kvToken}";
+// Usamos la variable completa de Upstash. Esto funciona porque la cadena incluye ya el password y SSL.
+var redisConnectionString = redisUrlCompleta;
+// Validar que la cadena no esté vacía antes de intentar conectar
+if (string.IsNullOrEmpty(redisConnectionString))
+{
+    // Colapsamos la aplicación con un error claro si la variable no está cargada en Render
+    throw new ArgumentException("Error fatal: La variable REDIS_URL está vacía en el entorno.");
+}
+
 var redis = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
 IDatabase kvDb = redis.GetDatabase();
 
