@@ -87,7 +87,7 @@ app.MapPost("/api/crear-preferencia-pago", async (PagoRequest request) => {
                 }
             },
             ExternalReference = paymentId,
-            NotificationUrl = "https://factura-ya.vercel.app/api/webhook-mercadopago"
+            NotificationUrl = "https://factura-ya.onrender.com/api/webhook-mercadopago"
         };
         var client = new PreferenceClient();
         Preference preference = await client.CreateAsync(preferenceRequest);
