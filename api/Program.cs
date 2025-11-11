@@ -28,9 +28,12 @@ var redisUrlCompleta = Environment.GetEnvironmentVariable("REDIS_URL");
 
 MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 
-// Usamos la variable completa de Upstash. Esto funciona porque la cadena incluye ya el password y SSL.
-var redisConnectionString = redisUrlCompleta;
-// Validar que la cadena no esté vacía antes de intentar conectar
+// ¡AQUÍ ESTÁ LA CORRECCIÓN!
+// Agregamos dos parámetros:
+// 1. abortConnect=false: Permite que el programa siga intentando arrancar aunque la conexión falle inicialmente.
+// 2. connectTimeout=5000: Damos 5 segundos para que se conecte antes de fallar.
+
+var redisConnectionString = $"{redisUrlCompleta},ssl=true,abortConnect=false,connectTimeout=5000";// Validar que la cadena no esté vacía antes de intentar conectar
 if (string.IsNullOrEmpty(redisConnectionString))
 {
     // Colapsamos la aplicación con un error claro si la variable no está cargada en Render
