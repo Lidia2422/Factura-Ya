@@ -33,14 +33,15 @@ MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 // 1. abortConnect=false: Permite que el programa siga intentando arrancar aunque la conexión falle inicialmente.
 // 2. connectTimeout=5000: Damos 5 segundos para que se conecte antes de fallar.
 
-var redisConnectionString = $"{redisUrlCompleta},ssl=true,abortConnect=false,connectTimeout=5000";// Validar que la cadena no esté vacía antes de intentar conectar
-if (string.IsNullOrEmpty(redisConnectionString))
-{
-    // Colapsamos la aplicación con un error claro si la variable no está cargada en Render
-    throw new ArgumentException("Error fatal: La variable REDIS_URL está vacía en el entorno.");
-}
+var configOptions = ConfigurationOptions.Parse(redisUrlCompleta);
 
-var redis = await ConnectionMultiplexer.ConnectAsync(redisConnectionString);
+// 2. Añadimos nuestras opciones de seguridad y timeout
+configOptions.AbortOnConnectFail = false;
+configOptions.ConnectTimeout = 10000; // Le damos 10 segundos (más seguro)
+configOptions.Ssl = true; // Nos aseguramos de que Ssl esté activado
+
+// 3. Conectamos usando el OBJETO de configuración, no el string
+var redis = await ConnectionMultiplexer.ConnectAsync(configOptions);
 IDatabase kvDb = redis.GetDatabase();
 
 
