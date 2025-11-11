@@ -57,9 +57,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-//app.UseHttpsRedirection();
 
+// app.UseHttpsRedirection(); // <-- ¡LA COMENTAMOS O ELIMINAMOS!
 
+// --- --- --- ¡NUEVAS LÍNEAS! --- --- ---
+// Esto le dice a la API que sirva el index.html como página principal
+app.UseDefaultFiles();
+// Esto le dice a la API que sirva los archivos de la carpeta "wwwroot" (index.html, script.js)
+app.UseStaticFiles();
+// --- --- --- --- --- --- --- --- --- ---
 // --- ENDPOINTS DE NUESTRA API ---
 
 // 1. /api/crear-preferencia-pago
