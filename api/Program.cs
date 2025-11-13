@@ -22,6 +22,7 @@ using MercadoPago.Resource.Preference;
 // --- LEER VARIABLES DE ENTORNO ---
 var mercadopagoAccessToken = Environment.GetEnvironmentVariable("MERCADOPAGO_ACCESS_TOKEN");
 var pacApiKey = Environment.GetEnvironmentVariable("PAC_API_KEY");
+var renderExternalUrl = Environment.GetEnvironmentVariable("RENDER_EXTERNAL_URL");
 
 // Leemos la URL completa que Upstash nos da
 var redisUrlCompleta = Environment.GetEnvironmentVariable("REDIS_URL");
@@ -87,7 +88,7 @@ app.MapPost("/api/crear-preferencia-pago", async (PagoRequest request) => {
                 }
             },
             ExternalReference = paymentId,
-            NotificationUrl = "https://factura-ya.onrender.com/api/webhook-mercadopago"
+            NotificationUrl = $"{renderExternalUrl}/api/webhook-mercadopago"
         };
         var client = new PreferenceClient();
         Preference preference = await client.CreateAsync(preferenceRequest);
