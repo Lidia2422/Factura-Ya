@@ -1,20 +1,23 @@
 // --- PASO 1: USING STATEMENTS (SIEMPRE PRIMERO) ---
-using System;
-using System.Text.Json;
-using System.Threading.Tasks;
-using System.Collections.Generic; // Asegura que List<T> funcione
+using FacturadorAPI;
+using FacturadorAPI.Models; // ¡NUESTRO NAMESPACE DE MODELOS!
+using FacturadorAPI.Services;
+using FiscalApi;
+using MercadoPago.Client.Payment;
+using MercadoPago.Client.Preference;
+using MercadoPago.Config;
+using MercadoPago.Resource.Payment;
+using MercadoPago.Resource.Preference;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using StackExchange.Redis;
-using MercadoPago.Config;
-using MercadoPago.Client.Payment;
-using MercadoPago.Client.Preference;
-using MercadoPago.Resource.Payment;
-using MercadoPago.Resource.Preference;
-// Agrega aquí los "using" de QuestPDF y tu PAC
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Threading.Tasks;
+// Agrega aquí los "using" de QuestPDF
 // using QuestPDF.Fluent;
-// using FiscalAPI.SDK; 
 
 
 // --- PASO 2: CÓDIGO EJECUTABLE (INSTRUCCIONES DE NIVEL SUPERIOR) ---
@@ -23,25 +26,15 @@ using MercadoPago.Resource.Preference;
 var mercadopagoAccessToken = Environment.GetEnvironmentVariable("MERCADOPAGO_ACCESS_TOKEN");
 var pacApiKey = Environment.GetEnvironmentVariable("PAC_API_KEY");
 var renderExternalUrl = Environment.GetEnvironmentVariable("RENDER_EXTERNAL_URL");
-
-// Leemos la URL completa que Upstash nos da
 var redisUrlCompleta = Environment.GetEnvironmentVariable("REDIS_URL");
 
 MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 
-// ¡AQUÍ ESTÁ LA CORRECCIÓN!
-// Agregamos dos parámetros:
-// 1. abortConnect=false: Permite que el programa siga intentando arrancar aunque la conexión falle inicialmente.
-// 2. connectTimeout=5000: Damos 5 segundos para que se conecte antes de fallar.
-
+// --- Configuración de REDIS ---
 var configOptions = ConfigurationOptions.Parse(redisUrlCompleta);
-
-// 2. Añadimos nuestras opciones de seguridad y timeout
 configOptions.AbortOnConnectFail = false;
-configOptions.ConnectTimeout = 10000; // Le damos 10 segundos (más seguro)
-configOptions.Ssl = true; // Nos aseguramos de que Ssl esté activado
-
-// 3. Conectamos usando el OBJETO de configuración, no el string
+configOptions.ConnectTimeout = 10000;
+configOptions.Ssl = true;
 var redis = await ConnectionMultiplexer.ConnectAsync(configOptions);
 IDatabase kvDb = redis.GetDatabase();
 
@@ -51,6 +44,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCors();
+builder.Services.AddFiscalApi(); // Registra el SDK de FiscalAPI
+builder.Services.AddScoped<FiscalAPIService>(); // Registra nuestro servicio
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -60,14 +55,9 @@ if (app.Environment.IsDevelopment())
 }
 app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
-// app.UseHttpsRedirection(); // <-- ¡LA COMENTAMOS O ELIMINAMOS!
+app.UseDefaultFiles(); // Sirve index.html
+app.UseStaticFiles(); // Sirve wwwroot
 
-// --- --- --- ¡NUEVAS LÍNEAS! --- --- ---
-// Esto le dice a la API que sirva el index.html como página principal
-app.UseDefaultFiles();
-// Esto le dice a la API que sirva los archivos de la carpeta "wwwroot" (index.html, script.js)
-app.UseStaticFiles();
-// --- --- --- --- --- --- --- --- --- ---
 // --- ENDPOINTS DE NUESTRA API ---
 
 // 1. /api/crear-preferencia-pago
@@ -113,16 +103,17 @@ app.MapPost("/api/guardar-datos-temporales", async (FacturaRequest request) => {
 });
 
 // 3. /api/webhook-mercadopago
-app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificacion) => {
+app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificacion, FiscalAPIService fiscalService) => {
 
     if (notificacion.action == "payment.updated")
     {
+
         long paymentIdFromNotification = long.Parse(notificacion.data.id);
         var paymentClient = new PaymentClient();
         Payment payment = await paymentClient.GetAsync(paymentIdFromNotification);
 
         var paymentStatus = payment.Status;
-        var paymentId = payment.ExternalReference;
+        var paymentId = payment.ExternalReference; // Este es nuestro GUID
 
         if (paymentStatus == "approved")
         {
@@ -132,31 +123,36 @@ app.MapPost("/api/webhook-mercadopago", async (MercadoPagoNotificacion notificac
 
                 if (string.IsNullOrEmpty(facturaJson))
                 {
-                    throw new Exception($"No se encontraron datos para PaymentId {paymentId}");
+                    // Si no hay datos, es posible que ya se haya procesado o expiró
+                    Console.WriteLine($"ADVERTENCIA: No se encontraron datos en Redis para {paymentId}");
+                    return Results.Ok();
                 }
 
                 var datosFactura = JsonSerializer.Deserialize<FacturaRequest>(facturaJson);
 
-                var cerBytes = Convert.FromBase64String(datosFactura.CsdCerBase64);
-                var keyBytes = Convert.FromBase64String(datosFactura.CsdKeyBase64);
+                Console.WriteLine($"Pago aprobado. Iniciando timbrado para: {datosFactura.ClienteNombre}");
 
-                // TODO: Reemplazar esto con la llamada real a FiscalAPI
-                Console.WriteLine($"Timbrando factura para {paymentId}");
-                var cfdiXmlSimulado = "<xml>Factura Timbrada</xml>";
+                // --- CAMBIO PRINCIPAL AQUÍ ---
 
-                // TODO: Reemplazar esto con la llamada real a QuestPDF
-                Console.WriteLine($"Generando PDF para {paymentId}");
-                var pdfBytesSimulados = new byte[0];
+                // 1. Llamamos al servicio que devuelve los archivos en Base64
+                var (xmlBase64, pdfBase64) = await fiscalService.TimbrarFactura(datosFactura);
 
-                // TODO: Guardar XML y PDF en un Blob Storage (Vercel Blob)
-                var urlXml = "https://simulado.com/factura.xml";
-                var urlPdf = "https://simulado.com/factura.pdf";
+                // 2. Guardamos los Base64 en Redis
+                // Nota: Usamos los campos 'urlXml' y 'urlPdf' para guardar el contenido B64 por ahora.
+                var estadoFinal = JsonSerializer.Serialize(new EstadoFactura(
+                    status: "lista",
+                    urlXml: xmlBase64,
+                    urlPdf: pdfBase64,
+                    mensaje: null
+                ));
 
-                var estadoFinal = JsonSerializer.Serialize(new EstadoFactura("lista", urlXml, urlPdf, null));
                 await kvDb.StringSetAsync($"status_{paymentId}", estadoFinal, TimeSpan.FromDays(1));
+
+                Console.WriteLine($"¡Éxito! Factura timbrada y guardada en Redis para {paymentId}");
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"ERROR TIMBRANDO: {ex.Message}");
                 var estadoError = JsonSerializer.Serialize(new EstadoFactura("error", null, null, ex.Message));
                 await kvDb.StringSetAsync($"status_{paymentId}", estadoError, TimeSpan.FromDays(1));
             }
@@ -183,30 +179,6 @@ app.MapGet("/api/status-factura/{paymentId}", async (string paymentId) => {
 // --- EJECUTAR LA API ---
 app.Run();
 
-
 // --- PASO 3: DECLARACIONES DE TIPOS (RECORDS) ---
-// ¡ESTE BLOQUE DEBE IR AQUÍ AL FINAL, DESPUÉS DE app.Run()!
-public record PagoRequest(decimal Importe);
-
-public record FacturaRequest(
-    string PaymentId,
-    string CsdCerBase64,
-    string CsdKeyBase64,
-    string CsdPassword,
-    string ClienteRfc,
-    string ClienteNombre,
-    string ClienteCp,
-    string ClienteRegimen,
-    string UsoCfdi,
-    string ConceptoDesc,
-    decimal ConceptoImporte
-);
-public record MercadoPagoNotificacion(string action, MercadoPagoPaymentData data);
-public record MercadoPagoPaymentData(string id);
-
-public record EstadoFactura(
-    string status,
-    string? urlXml,
-    string? urlPdf,
-    string? mensaje
-);
+// ¡ESTE BLOQUE DEBE ESTAR VACÍO!
+// (Todos los records se movieron a Models.cs)
