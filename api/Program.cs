@@ -30,11 +30,14 @@ var redisUrlCompleta = Environment.GetEnvironmentVariable("REDIS_URL");
 
 MercadoPagoConfig.AccessToken = mercadopagoAccessToken;
 
-// --- Configuración de REDIS ---
 var configOptions = ConfigurationOptions.Parse(redisUrlCompleta);
 configOptions.AbortOnConnectFail = false;
-configOptions.ConnectTimeout = 10000;
+// Aumentamos los tiempos de espera para dar chance a que Upstash despierte
+configOptions.ConnectTimeout = 20000; // 20 segundos para conectar
+configOptions.SyncTimeout = 20000;    // 20 segundos para operaciones síncronas
+configOptions.AsyncTimeout = 20000;   // 20 segundos para operaciones asíncronas (CRÍTICO)
 configOptions.Ssl = true;
+
 var redis = await ConnectionMultiplexer.ConnectAsync(configOptions);
 IDatabase kvDb = redis.GetDatabase();
 
